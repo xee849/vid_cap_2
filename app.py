@@ -4,7 +4,9 @@ import tempfile
 import pandas as pd
 import streamlit as st
 import altair as alt
-import cv2
+from PIL import Image
+import io
+from moviepy.editor import VideoFileClip
 
 # Load YOLOv8 model
 model = YOLO('best.pt')
@@ -21,23 +23,20 @@ def detect_animals(image):
     return annotated_image, animal_counts
 
 def process_video_frame(video_path):
-    """Process video frame by frame and yield annotated frames and counts."""
-    cap = cv2.VideoCapture(video_path)
-    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    """Process video frame by frame using PIL and yield annotated frames and counts."""
+    
+
+    clip = VideoFileClip(video_path)
+    fps = clip.fps
     frame_interval = int(fps // 5)  # Process 1 frame every 5th of a second
 
-    frame_count = 0
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-        frame_count += 1
-        if frame_count % frame_interval != 0:
+    for frame_idx, frame in enumerate(clip.iter_frames(fps=fps)):
+        if frame_idx % frame_interval != 0:
             continue
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        annotated_frame, animal_counts = detect_animals(frame)
+        # Convert frame (numpy array) to PIL Image
+        frame_pil = Image.fromarray(frame)
+        annotated_frame, animal_counts = detect_animals(frame_pil)
         yield annotated_frame, animal_counts
-    cap.release()
 
 def plot_animal_counts(animal_counts):
     """Generate a bar chart for animal counts."""
@@ -80,19 +79,18 @@ def main():
             video_placeholder = st.empty()  # Placeholder for the video
             chart_placeholder = st.empty()  # Placeholder for the chart below video
 
-            fps = cv2.VideoCapture(video_path).get(cv2.CAP_PROP_FPS)  # Get frame rate
-            total_frames = int(cv2.VideoCapture(video_path).get(cv2.CAP_PROP_FRAME_COUNT))
+            clip = VideoFileClip(video_path)
+            total_frames = int(clip.duration * clip.fps)
 
             # Process and display video frame by frame
             for idx, (annotated_frame, animal_counts) in enumerate(process_video_frame(video_path)):
                 # Update progress bar
                 progress_bar.progress((idx + 1) / total_frames)
 
-                # Display the video frame in a specific window size
+                # Convert annotated frame (numpy array) to PIL Image and display
                 video_placeholder.image(
-                    annotated_frame, 
-                    channels="RGB", 
-                    use_column_width=False, 
+                    annotated_frame,
+                    use_column_width=False,
                     width=640
                 )
 
@@ -104,13 +102,10 @@ def main():
     elif upload_type == "Image":
         image_file = st.sidebar.file_uploader("Upload an image file", type=["jpg", "jpeg", "png"])
         if image_file:
-            file_bytes = np.asarray(bytearray(image_file.read()), dtype=np.uint8)
-            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
+            image = Image.open(image_file)
             annotated_image, animal_counts = detect_animals(image)
 
-            st.image(annotated_image, channels="RGB", use_column_width=True, caption="Detected Animals")
+            st.image(annotated_image, use_column_width=True, caption="Detected Animals")
 
             chart = plot_animal_counts(animal_counts)
             if chart:
@@ -118,6 +113,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
