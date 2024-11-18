@@ -58,6 +58,7 @@ def plot_animal_counts(animal_counts):
         return None
 
 def main():
+    st.sidebar.image("animalsimage.jpg", use_column_width=True)
     st.title("Species Identification and Monitoring Terrestrial")
 
     # Sidebar for user input
